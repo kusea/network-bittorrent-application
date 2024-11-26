@@ -109,6 +109,10 @@ class Tracker(BaseHTTPRequestHandler):
         except Exception as e:
             self._respond(500, {"error": f"Internal server error: {e}"})
 
+    def log_message(self, format, *args):
+        """Disable default HTTP logging."""
+        return
+
 
 def remove_inactive_peers(tracker_data, lock, time_out = 30):
     """Periodically remove inactive peers."""

@@ -75,7 +75,7 @@ class Tracker(object):
             if not new_peer.connect():
                 continue
 
-            print('Connected to %d/%d peers' % (len(self.connected_peers), MAX_PEERS_CONNECTED))
+            logging.info('Connected to %d/%d peers' % (len(self.connected_peers), MAX_PEERS_CONNECTED))
 
             self.connected_peers[new_peer.__hash__()] = new_peer
 
@@ -157,7 +157,7 @@ class Tracker(object):
             if sock_addr.__hash__() not in self.dict_sock_addr:
                 self.dict_sock_addr[sock_addr.__hash__()] = sock_addr
 
-        print("Got %d peers" % len(self.dict_sock_addr))
+        logging.info("Got %d peers" % len(self.dict_sock_addr))
 
     def send_message(self, conn, sock, tracker_message):
         message = tracker_message.to_bytes()

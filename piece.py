@@ -5,7 +5,7 @@ import math
 import time
 import logging
 
-from pubsub import pub
+import pub
 from block import Block, BLOCK_SIZE, State
 
 

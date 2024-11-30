@@ -1,7 +1,7 @@
 import time
 import select
 from threading import Thread
-from pubsub import pub
+import pub
 import logging
 import message
 import peer

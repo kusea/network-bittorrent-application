@@ -1,5 +1,4 @@
 import sys
-from block import State
 import time
 import peers_manager
 import pieces_manager

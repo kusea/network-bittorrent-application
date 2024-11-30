@@ -1,7 +1,7 @@
 import piece
 import bitstring
 import logging
-from pubsub import pub
+import pub
 
 
 class PiecesManager(object):

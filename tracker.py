@@ -1,187 +1,161 @@
-import ipaddress
-import struct
-import peer
-from message import UdpTrackerConnection, UdpTrackerAnnounce, UdpTrackerAnnounceOutput
-from peers_manager import PeersManager
-
-
-import requests
-import logging
-from bcoding import bdecode
+# creating a tracker for Peer to Peer network
 import socket
-from urllib.parse import urlparse
+import threading
+import time
+import pickle
+import os
 
-MAX_PEERS_TRY_CONNECT = 30
-MAX_PEERS_CONNECTED = 8
-
-
-class SockAddr:
-    def __init__(self, ip, port, allowed=True):
-        self.ip = ip
-        self.port = port
-        self.allowed = allowed
-
-    def __hash__(self):
-        return "%s:%d" % (self.ip, self.port)
+CONN_TEST_TIME = 1
 
 
-class Tracker(object):
-    def __init__(self, torrent):
-        self.torrent = torrent
-        self.threads_list = []
-        self.connected_peers = {}
-        self.dict_sock_addr = {}
+def is_socket_closed(sock: socket.socket) -> bool:
+    """
+    for a given socket see if it is closed.
+    """
+    try:
+        # this will try to read bytes without blocking and also without removing them from buffer (peek only)
+        # sock.settimeout(0.5)
+        try:
+            obj = pickle.dumps('testing conn')
+            sock.send(obj)
+        except socket.error:
+            return True
+        return False
 
-        # Add your local tracker URL directly
-        self.local_tracker = "http://127.0.0.1:6969/announce"
+    except BlockingIOError:
+        return False  # socket is open and reading from it would block
+    except ConnectionResetError:
+        return True  # socket was closed for some other reason
+    except Exception as e:
+        # logger.exception("unexpected exception when checking if a socket is closed")
+        return True
+    return False
 
-    def get_peers_from_trackers(self):
-        # Ensure local tracker is included
-        trackers_to_check = [[self.local_tracker]] + self.torrent.announce_list
 
-        for tracker in trackers_to_check:
-            if len(self.dict_sock_addr) >= MAX_PEERS_TRY_CONNECT:
+class Tracker:
+    """
+    Manages the network
+    """
+    #Types of each attribute
+    s: socket.socket
+    connections: dict[(str, int), (socket.socket, (str, int))]
+    accept_thread: threading.Thread
+    broadcast_peers_thread: threading.Thread
+    recv_msg_thread: threading.Thread
+
+    server_ip = '128.192.16.1'
+    port = 1233
+    connections = dict()
+
+    def __init__(self):
+        self.s = socket.socket()
+        self.s.bind((self.server_ip, self.port))
+        self.s.listen(10)
+        print("up and running")
+
+    def __del__(self):
+        self.s.close()
+
+    def accept_connections(self):
+        """
+        accepts connections from peers and adds them into a list
+
+        """
+        while True:
+            conn, addr = self.s.accept()
+            conn.send(b'Send port')
+            conn.settimeout(2)
+            try:
+                peer_addr = pickle.loads(conn.recv(512))
+                self.connections[addr] = (conn, peer_addr)
+                print(f"Got connection from {addr, peer_addr}")
+
+                self.recv_msg_thread = threading.Thread(target=self.recv_msg, args=(conn, addr))
+                self.recv_msg_thread.start()
+
+                self.start_broadcast_peers_thread()
+            except Exception as e:
+                print(f"Got exception {e} while receiving from addr {addr}")
                 break
 
-            tracker_url = tracker[0]
+    def recv_msg(self, c: socket.socket, addr):
+        """
+        revive msgs from the peers
+        """
+        while True:
+            c.settimeout(10000)
+            try:
+                msg = c.recv(512).decode()
+                if msg == 'close':
+                    print(addr)
+                    self.connections.pop(addr)
+                    self.start_broadcast_peers_thread()
+                    break
 
-            if tracker_url.startswith("http"):
-                try:
-                    self.http_scraper(self.torrent, tracker_url)
-                except Exception as e:
-                    logging.error("HTTP scraping failed: %s " % e)
+                if msg == 'get_peers':
+                    conn = pickle.dumps({
+                        "type": "peers",
+                        "peers": [x[1] for a, x in self.connections.items()]
+                    })
+                    c.send(conn)
 
-            elif tracker_url.startswith("udp"):
-                try:
-                    self.udp_scrapper(tracker_url)
-                except Exception as e:
-                    logging.error("UDP scraping failed: %s " % e)
-
-            else:
-                logging.error("Unknown scheme for: %s " % tracker_url)
-
-        self.try_peer_connect()
-
-        return self.connected_peers
-
-    def try_peer_connect(self):
-        logging.info("Trying to connect to %d peer(s)" % len(self.dict_sock_addr))
-
-        for _, sock_addr in self.dict_sock_addr.items():
-            if len(self.connected_peers) >= MAX_PEERS_CONNECTED:
+            except Exception as e:
+                print(f"Got exception {e} while receiving from addr {addr}")
                 break
 
-            new_peer = peer.Peer(int(self.torrent.number_of_pieces), sock_addr.ip, sock_addr.port)
-            if not new_peer.connect():
-                continue
+    def periodic_conn_test(self):
+        """
+        see if the connected peers are reachable.
+        If not, remove them from the peers list and broadcast.
+        """
+        while True:
+            closed_connections = []  # stores the keys for closed connections
+            for addr, c in self.connections.items():
+                if is_socket_closed(c[0]):
+                    closed_connections.append(addr)
 
-            logging.info('Connected to %d/%d peers' % (len(self.connected_peers), MAX_PEERS_CONNECTED))
+            n_closed = len(closed_connections)
+            for addr in closed_connections:
+                self.connections.pop(addr)
 
-            self.connected_peers[new_peer.__hash__()] = new_peer
+            if n_closed > 0:
+                self.start_broadcast_peers_thread()
 
-    def http_scraper(self, torrent, tracker):
-        params = {
-            'info_hash': torrent.info_hash,
-            'peer_id': torrent.peer_id,
-            'uploaded': 0,
-            'downloaded': 0,
-            'port': 6881,
-            'left': torrent.total_length,
-            'event': 'started'
-        }
+            time.sleep(CONN_TEST_TIME)
 
-        try:
-            answer_tracker = requests.get(tracker, params=params, timeout=5)
-            list_peers = bdecode(answer_tracker.content)
-            offset=0
-            if not type(list_peers['peers']) == list:
-                '''
-                    - Handles bytes form of list of peers
-                    - IP address in bytes form:
-                        - Size of each IP: 6 bytes
-                        - The first 4 bytes are for IP address
-                        - Next 2 bytes are for port number
-                    - To unpack initial 4 bytes !i (big-endian, 4 bytes) is used.
-                    - To unpack next 2 byets !H(big-endian, 2 bytes) is used.
-                '''
-                for _ in range(len(list_peers['peers'])//6):
-                    ip = struct.unpack_from("!i", list_peers['peers'], offset)[0]
-                    ip = socket.inet_ntoa(struct.pack("!i", ip))
-                    offset += 4
-                    port = struct.unpack_from("!H",list_peers['peers'], offset)[0]
-                    offset += 2
-                    s = SockAddr(ip,port)
-                    self.dict_sock_addr[s.__hash__()] = s
-            else:
-                for p in list_peers['peers']:
-                    s = SockAddr(p['ip'], p['port'])
-                    self.dict_sock_addr[s.__hash__()] = s
+    def start_broadcast_peers_thread(self):
+        """
+        start the broadcast thread
+        """
+        self.broadcast_peers_thread = threading.Thread(target=self.broadcast_peers)
+        self.broadcast_peers_thread.start()
 
-        except Exception as e:
-            logging.exception("HTTP scraping failed: %s" % e.__str__())
+    def broadcast_peers(self):
+        """
+        sends the details about peers to other peers
+        """
+        conn = pickle.dumps({
+            "type": "peers",
+            "peers": [ x[1] for a, x in self.connections.items() ]
+        })
+        for addr in self.connections:
+            self.connections[addr][0].send(conn)
 
-    def udp_scrapper(self, announce):
-        torrent = self.torrent
-        parsed = urlparse(announce)
+    def run(self):
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.settimeout(4)
-        ip, port = socket.gethostbyname(parsed.hostname), parsed.port
-
-        if ipaddress.ip_address(ip).is_private:
-            return
-
-        tracker_connection_input = UdpTrackerConnection()
-        response = self.send_message((ip, port), sock, tracker_connection_input)
-
-        if not response:
-            raise Exception("No response for UdpTrackerConnection")
-
-        tracker_connection_output = UdpTrackerConnection()
-        tracker_connection_output.from_bytes(response)
-
-        tracker_announce_input = UdpTrackerAnnounce(torrent.info_hash, tracker_connection_output.conn_id,
-                                                    torrent.peer_id)
-        response = self.send_message((ip, port), sock, tracker_announce_input)
-
-        if not response:
-            raise Exception("No response for UdpTrackerAnnounce")
-
-        tracker_announce_output = UdpTrackerAnnounceOutput()
-        tracker_announce_output.from_bytes(response)
-
-        for ip, port in tracker_announce_output.list_sock_addr:
-            sock_addr = SockAddr(ip, port)
-
-            if sock_addr.__hash__() not in self.dict_sock_addr:
-                self.dict_sock_addr[sock_addr.__hash__()] = sock_addr
-
-        logging.info("Got %d peers" % len(self.dict_sock_addr))
-
-    def send_message(self, conn, sock, tracker_message):
-        message = tracker_message.to_bytes()
-        trans_id = tracker_message.trans_id
-        action = tracker_message.action
-        size = len(message)
-
-        sock.sendto(message, conn)
-
-        try:
-            response = PeersManager._read_from_socket(sock)
-        except socket.timeout as e:
-            logging.debug("Timeout : %s" % e)
-            return
-        except Exception as e:
-            logging.exception("Unexpected error when sending message : %s" % e.__str__())
-            return
-
-        if len(response) < size:
-            logging.debug("Did not get full message.")
-
-        if action != response[0:4] or trans_id != response[4:8]:
-            logging.debug("Transaction or Action ID did not match")
-
-        return response
+        self.accept_thread = threading.Thread(target=self.accept_connections)
+        self.accept_thread.start()
+        self.periodic_conn_test_thread = threading.Thread(target=self.periodic_conn_test)
+        self.periodic_conn_test_thread.start()
 
 
+if __name__ == "__main__":
+    try:
+        manager = Tracker()
+        manager.run()
+        inp = input()
+        if inp == 'c' or inp == 'close':
+            os._exit(0)
+
+    except KeyboardInterrupt:
+        os._exit(0)

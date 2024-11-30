@@ -36,14 +36,13 @@ class Tracker:
     """
     Manages the network
     """
-    #Types of each attribute
     s: socket.socket
     connections: dict[(str, int), (socket.socket, (str, int))]
     accept_thread: threading.Thread
     broadcast_peers_thread: threading.Thread
     recv_msg_thread: threading.Thread
 
-    server_ip = '128.192.16.1'
+    server_ip = ''
     port = 1233
     connections = dict()
 
@@ -62,23 +61,19 @@ class Tracker:
 
         """
         while True:
-            conn, addr = self.s.accept()
-            conn.send(b'Send port')
-            conn.settimeout(2)
-            try:
-                peer_addr = pickle.loads(conn.recv(512))
-                self.connections[addr] = (conn, peer_addr)
-                print(f"Got connection from {addr, peer_addr}")
+            c, addr = self.s.accept()
 
-                self.recv_msg_thread = threading.Thread(target=self.recv_msg, args=(conn, addr))
-                self.recv_msg_thread.start()
 
-                self.start_broadcast_peers_thread()
-            except Exception as e:
-                print(f"Got exception {e} while receiving from addr {addr}")
-                break
+            c.send(b'Send port')
+            c.settimeout(2)
+            peer_addr = pickle.loads(c.recv(512))
+            self.connections[addr] = (c, peer_addr)
+            print(f"Got connection from {addr, peer_addr}")
+            self.recv_msg_thread = threading.Thread(target=self.recv_msg, args=(c, addr))
+            self.recv_msg_thread.start()
+            self.start_broadcast_peers_thread()
 
-    def recv_msg(self, c: socket.socket, addr):
+    def recv_msg(self, c: socket.socket, addr: (str, int)):
         """
         revive msgs from the peers
         """
@@ -100,7 +95,7 @@ class Tracker:
                     c.send(conn)
 
             except Exception as e:
-                print(f"Got exception {e} while receiving from addr {addr}")
+                print(f"got exception {e} while receiving from addr {addr}")
                 break
 
     def periodic_conn_test(self):

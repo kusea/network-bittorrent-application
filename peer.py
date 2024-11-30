@@ -620,38 +620,6 @@ def monitor_torrent_status(torrent_id=1):
         print(f"Error while monitoring torrent: {e}")
 
 
-def seeder(torrent_file_path, download_dir):
-    """
-    Simulate seeding by adding a torrent with a download limit and setting the download directory.
-    """
-    command = [
-        "transmission-remote",
-        "--add", torrent_file_path,
-        "--downlimit", "500",  # Set download speed limit to 500 KB/s
-        "--download-dir", download_dir  # Set download directory
-    ]
-
-    # Execute the seeder command
-    subprocess.run(command)
-    print(f"Seeder started with torrent: {torrent_file_path}")
-
-
-def leecher(torrent_file_path, download_dir):
-    """
-    Simulate leeching by adding a torrent with a download limit and setting the download directory.
-    """
-    command = [
-        "transmission-remote",
-        "--add", torrent_file_path,
-        "--downlimit", "500",  # Set download speed limit to 500 KB/s
-        "--download-dir", download_dir  # Set download directory
-    ]
-
-    # Execute the leecher command
-    subprocess.run(command)
-    print(f"Leecher started with torrent: {torrent_file_path}")
-
-
 def seed_torrent_with_transmission(peer_name, file_name, peers_dir, dest_folder):
     """
     Use transmission-remote to start seeding a torrent for a given peer.

@@ -51,7 +51,7 @@ class Tracker:
         self.s = socket.socket()
         self.s.bind((self.server_ip, self.port))
         self.s.listen(10)
-        print("up and running")
+        print("running. 'close' to stop")
 
     def __del__(self):
         self.s.close()
@@ -147,6 +147,21 @@ class Tracker:
         self.accept_thread.start()
         self.periodic_conn_test_thread = threading.Thread(target=self.periodic_conn_test)
         self.periodic_conn_test_thread.start()
+
+    def connect_tracker():
+        try:
+            tracker_ip = '127.0.0.1'
+            tracker_port = 1233
+            with socket.create_connection((tracker_ip, tracker_port), timeout=1) as s:
+                print(f"Connected to tracker at {tracker_ip}:{tracker_port}")
+                # Send initial message or perform handshake if needed
+                s.sendall(b'Hello, Tracker')
+                response = s.recv(1024)
+                print(f"Received from tracker: {response.decode()}")
+        except (socket.timeout, ConnectionRefusedError) as e:
+            print(f"Failed to connect to tracker: {e}")
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
 
 
 if __name__ == "__main__":

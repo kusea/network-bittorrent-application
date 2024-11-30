@@ -50,7 +50,7 @@ class Tracker:
         self.s = socket.socket()
         self.s.bind((self.server_ip, self.port))
         self.s.listen(10)
-        print("up and running")
+        print("running. 'close' to stop")
 
     def __del__(self):
         self.s.close()

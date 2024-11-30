@@ -124,7 +124,7 @@ def get_files_action(p):  # Add `p` as a parameter
             file_path = os.path.join(peer_directory, file_name)
 
             # Check if the file already exists in the current directory
-            dest_path = os.path.join(p.dest_folder, file_name)
+            dest_path = os.path.join(p.dest_folder, file_path)
             if os.path.exists(dest_path):
                 print(f"File '{file_name}' already exists in your folder. Overwriting.")
 
@@ -162,7 +162,6 @@ def get_files_action(p):  # Add `p` as a parameter
         # Construct the full path to the torrent file in the peer's directory
 
         torrent_file_path = os.path.join(peer_directory, torrent_file_name)
-
         # Check if the torrent file exists
 
         if not os.path.exists(torrent_file_path):
@@ -176,6 +175,8 @@ def get_files_action(p):  # Add `p` as a parameter
             destination_directory = p.dest_folder
 
             # Call the method to download the torrent
+            print(peer_directory)
+            print(torrent_file_path)
 
             success = download_torrent_with_transmission(peer_name, torrent_file_path, destination_directory)
 
@@ -747,6 +748,7 @@ if __name__ == "__main__":
         print("4|sharable_files: get the list of sharable files")
         print("5|monitor_torrent: Monitor torrent status (default id = 1)")
         print("6|end: End the program\n\n")
+        print("7|upload file")
 
         # Connect to manager and retrieve peers
         p.connect_manager()

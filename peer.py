@@ -175,8 +175,6 @@ def get_files_action(p):  # Add `p` as a parameter
             destination_directory = p.dest_folder
 
             # Call the method to download the torrent
-            print(peer_directory)
-            print(torrent_file_path)
 
             success = download_torrent_with_transmission(peer_name, torrent_file_path, destination_directory)
 
@@ -715,8 +713,8 @@ if __name__ == "__main__":
         print("3|get_files: get files from peers")
         print("4|sharable_files: get the list of sharable files")
         print("5|monitor_torrent: Monitor torrent status (default id = 1)")
-        print("6|end: End the program\n\n")
-        print("7|upload file")
+        print("6|upload file")
+        print("7|end: End the program\n\n")
 
         # Connect to manager and retrieve peers
         p.connect_manager()
@@ -735,28 +733,30 @@ if __name__ == "__main__":
                     connected = 0
                 else:
                     print("peer is not connected!")
+                print("Exiting the program.")
+                break
 
-            if inp == "conn" or inp == '1':
+            elif inp == "conn" or inp == '1':
                 if not connected:
                     p = Peer(port_no, name)
                     connected = 1
                 else:
                     print("peer is already connected to manager")
 
-            if inp == "get_peers" or inp == '2':
+            elif inp == "get_peers" or inp == '2':
                 p.update_peers()  # Request for peer update manually
                 print(f"available peers are: {p.peers}")
 
-            if inp == "3" or inp == "get_files":
+            elif inp == "3" or inp == "get_files":
                 get_files_action(p)
 
-            if inp == 'sharable_files' or inp == '4':
+            elif inp == 'sharable_files' or inp == '4':
                 print(f"our available files are: {list(p.available_files.keys())}")
 
-            if inp == 'monitor_torrent' or inp == '5':
+            elif inp == 'monitor_torrent' or inp == '5':
                 monitor_torrent_status()
 
-            if inp == '7':
+            elif inp == '6':
                 # Get user input for peer name and file name
                 peer_name = input("Enter the name of the peer: ")
                 file_name = input("Enter the file name to seed: ")
@@ -769,14 +769,11 @@ if __name__ == "__main__":
                     print("Seeding started successfully.")
                 else:
                     print("Failed to start seeding.")
-
-            elif inp == '0':
-                print("Exiting the program.")
-                break
+            elif inp == 'end' or inp == '7':
+                os._exit(0)
             else:
                 print("Invalid option. Please try again.")
 
-            if inp == 'end' or inp == '6':
-                os._exit(0)
+            
     except KeyboardInterrupt:
         os._exit(0)

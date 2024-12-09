@@ -42,7 +42,7 @@ class Tracker:
     broadcast_peers_thread: threading.Thread
     recv_msg_thread: threading.Thread
 
-    server_ip = ''
+    server_ip = '127.0.0.1'
     port = 1233
     connections = dict()
 

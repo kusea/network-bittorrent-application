@@ -156,11 +156,10 @@ def get_files_action(p):  # Add `p` as a parameter
         # Handle torrent download
 
         peer_name = input("Enter the name of the peer you want to get the torrent file from: ")
-        peer_directory = os.path.join(PEERS_DIR, peer_name)
+        peer_directory = os.path.abspath(os.path.join(PEERS_DIR, peer_name))
         torrent_file_name = input("Enter the name of the torrent file (e.g., he.torrent): ")
 
         # Construct the full path to the torrent file in the peer's directory
-
         torrent_file_path = os.path.join(peer_directory, torrent_file_name)
         # Check if the torrent file exists
 
@@ -283,12 +282,13 @@ class Peer:
     peers: list[(str, int)]  # list of all peers
     peers_connections: dict[(str, int), socket.socket]
     port: int
+    manager_ip =  "127.0.0.1"
     manager_port = 1233
     addr: (str, int)
     available_files: dict[str, CompleteFile]
     files_in_progress: set
 
-    def __init__(self, port_no: int, name: str, ip_addr='127.0.0.1'):
+    def __init__(self, port_no: int, name: str, ip_addr = '127.0.0.1'):
         self.port = port_no
         self.name = name
         self.directory = os.path.join(PEERS_DIR, name)
@@ -296,7 +296,7 @@ class Peer:
         self.addr = (ip_addr, port_no)
         self.peers_connections = {}
         self.my_socket = socket.socket()
-        self.ip_addr = ip_addr;
+        self.ip_addr = ip_addr
 
         if not os.path.isdir(self.directory):
             os.mkdir(self.directory)
@@ -355,7 +355,7 @@ class Peer:
         """
         Connect to manager
         """
-        self.s.connect(('localhost', self.manager_port))
+        self.s.connect((self.manager_ip, self.manager_port))
         msg = self.s.recv(512).decode()
         if msg == 'Send port':
             self.s.send(pickle.dumps(self.addr))

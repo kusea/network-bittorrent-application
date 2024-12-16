@@ -3,15 +3,15 @@ import time
 import threading
 import json
 
-IP = "192.168.1.102"
+IP = "192.168.214.205"
 PORT = 4456
 SIZE = 1024
 FORMAT = "utf-8"
 
 # This can be done with list (not sure about array) 
 # They all have upsides and disadvantages
-client_list = {}    # store dict of id with format {port} : (username, client_ip, client_server_port)
-file_list = {}      # Store list of client's id that have corresponding file (file - [(name, client_server_port)])
+client_list = {}    
+file_list = {} 
 
 # Func to send message to client
 def send_message(message, conn):
@@ -81,13 +81,6 @@ def ping_client(hostname):
 
 # LEGACY CODE
 def send_avail_sender_list(receiver_id, fname):
-    '''
-    The sending message follows this format:
-    [<id1>, <id2>, ...]
-    Example:
-        [('192.168.1.105', 62563), ('192.168.1.105', 62564)]
-        []
-    '''
     conn = client_list[receiver_id]
     sender_list = file_list.get(fname, [])
     send_message(receiver_id, str(sender_list))
@@ -101,7 +94,7 @@ def check_valid_sender(client_id, fname):
     else:
         return False
 
-def handle_fetch_file(client_conn, file_name):
+def handle_download_file(client_conn, file_name):
     list_name = file_list.get(file_name)
     if not list_name :
         client_conn.send("none".encode())
@@ -112,7 +105,7 @@ def handle_fetch_file(client_conn, file_name):
         send_msg = json.dumps(list_name)
         client_conn.send(send_msg.encode())
 
-def handle_inform(client_conn, file_name, username):
+def handle_inform(file_name, username, size):
     # Retrieve client details using the username
     client_details = client_list.get(username)
     
@@ -123,8 +116,8 @@ def handle_inform(client_conn, file_name, username):
     client_port, client_ip, client_server_port = client_details
 
     # Add the file to the file_list
-    file_list[file_name] = file_list.get(file_name, []) + [(username, client_ip, client_server_port)]
-    print(f"Client {username} fetched file {file_name}")    
+    file_list[file_name] = file_list.get(file_name, []) + [(username, client_ip, client_server_port, size)]
+    print(f"Peer {username} downloaded file {file_name}")    
 
 def handle_scrape(client_conn):
     online_clients = {username: [] for username in client_list}  # Initialize all online clients
@@ -133,22 +126,28 @@ def handle_scrape(client_conn):
     for file_name, clients in file_list.items():
         for client in clients:
             username = client[0]
+            file_size = client[3]
             if username in online_clients:  # Check if the client is online
-                online_clients[username].append(file_name)
+                online_clients[username].append((file_name, file_size))
 
     # Prepare the message to send
-    message = "Online clients with their files:\n"
+    message = f"Number of peers online: {len(online_clients)}\n"
+    message += "Online peers with their files:\n"
     for username, files in online_clients.items():
-        files_str = ', '.join(files) if files else "No files"
-        message += f"{username}: {files_str}\n"
+        if files:
+            files_str = ', '.join([f"{file_name} ({float(file_size):.2f} KB)" for file_name, file_size in files])
+        else:
+            files_str = "No files"
+        message += f"[{username}]: {files_str}\n"
 
     # Send the message to the client
     client_conn.send(message.encode('utf-8'))
 
-    print("Sent online clients and their files to the client.")
+    print("Sent online peers and their files to the peer.")
 
 
-def handle_publish_file(client_conn, file_name, username):
+
+def handle_share_file(client_conn, file_name, username, size):
     # Find the username associated with the client connection
     client_details = client_list.get(username)
     if not client_details:
@@ -157,10 +156,10 @@ def handle_publish_file(client_conn, file_name, username):
 
     client_port, client_ip, client_server_port = client_details
     # Add the file to the file_list
-    file_list[file_name] = file_list.get(file_name, []) + [(username, client_ip, client_server_port)]
+    file_list[file_name] = file_list.get(file_name, []) + [(username, client_ip, client_server_port, size)]
 
     send_message("Success", client_conn)
-    print(f"Client {username} uploaded file {file_name}")
+    print(f"Peer {username} shared file {file_name}")
 
 # Function for server to discover and ping clients
 def handle_commands():
@@ -195,23 +194,14 @@ def handle_commands():
                     if not client_list:
                         print("No users are currently connected.")
                     else:
-                        print("List of all connected clients:")
+                        print("List of all connected peers:")
                         for client in client_list.keys():
                             username = client
                             print(f"[{username}]")
                 except Exception as e:
-                    print(f"Error listing all clients: {e}")
+                    print(f"Error listing all peers: {e}")
 
-def handle_client_connection(client_conn, username):
-    '''
-    The receiving cmd must be in the following format:
-    <function> <fname> where:
-    <function> can be: ['publish', 'fetch']
-    <fname> can be any filename
-    Example: 
-        publish test.txt
-        fetch test.txt
-    '''
+def handle_peer_connection(client_conn, username):
     try:
         while True:
             message_length = client_conn.recv(SIZE).decode(FORMAT) 
@@ -220,30 +210,32 @@ def handle_client_connection(client_conn, username):
                     func, name = message_length.split()
                 elif len(message_length.split()) == 1:
                     func = message_length
+                elif len(message_length.split()) == 3:
+                    func, name, size = message_length.split()
 
-                if func.lower() == 'publish':
+                if func.lower() == 'share':
                     try:
-                        handle_publish_file(client_conn, name, username)
+                        handle_share_file(client_conn, name, username, size)
                     except Exception as e:
-                        print(f"Error while publishing: {e}")
-                elif func.lower() == 'fetch':
+                        print(f"Error while sharing: {e}")
+                elif func.lower() == 'download':
                     try:
-                        handle_fetch_file(client_conn, name)  
+                        handle_download_file(client_conn, name)  
                     except Exception as e:
-                        print(f"Error while fetching: {e}")
+                        print(f"Error while downloading: {e}")
                 elif func.lower() == 'disconnect':
                     try:
                         remove_client(username)
                     except Exception as e:
                         print(f"Error while disconnecting: {e}")
-                elif func.lower() == 'print_scrape':
+                elif func.lower() == 'scrape':
                     try:
                         handle_scrape(client_conn)
                     except Exception as e:
                         print(f"Error while scraping: {e}")
                 elif func.lower() == 'inform':
                     try:
-                        handle_inform(client_conn, name, username)
+                        handle_inform(name, username, size)
                     except Exception as e:
                         print(f"Error while informing: {e}")
     # Handle exception, remove_client and disconnect them
@@ -256,7 +248,7 @@ def handle_client_connection(client_conn, username):
 
 def main():
     # Text
-    print("[STARTING] Server is starting.\n")
+    print("[STARTING] Tracker Server is starting.\n")
 
     # Server creates a socket with static IP and PORT for connection 
     # IP = https://www.tutorialspoint.com/python-program-to-find-the-ip-address-of-the-client
@@ -290,14 +282,12 @@ def main():
             username = client_conn.recv(SIZE).decode(FORMAT)
         send_message("Valid", client_conn)
         client_server_port = int(client_conn.recv(SIZE).decode(FORMAT))
-        # then client_list[13456] and client_list[4402] stores (thanh, 127.0.0.1, 4402)
         client_list[username] = (client_port, client_ip, client_server_port)
 
         # finally server will notify in terminal
         print(f"User {username}, IP: {client_ip}, Port: {client_port} connected.")
 
-        # and create a new thread for the client (publish, fetch)
-        client_thread = threading.Thread(target=handle_client_connection, args=(client_conn, username))
+        client_thread = threading.Thread(target=handle_peer_connection, args=(client_conn, username))
         client_thread.start()
 
 

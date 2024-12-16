@@ -6,7 +6,7 @@ import json
 '''
 Client Configuration
 ''' 
-SERVER_IP = "192.168.1.102"
+SERVER_IP = "192.168.214.205"
 SERVER_PORT = 4456
 
 BYTE = 1024
@@ -34,20 +34,20 @@ def send_request(request):
 
 def send_file(conn, file_path):
     with open(file_path, 'rb') as file:
-        data = file.read(20480)  # Read 20 KB at a time (adjust as needed)
+        data = file.read(1048576)  # Read 20 KB at a time (adjust as needed)
         while data:
             conn.send(data)
-            data = file.read(20480)
+            data = file.read(1048576)
 
 # Function to fetch target clients for a file
 # Returns: dict of available client username and their ports
-def fetch_from_clients(file_name):
-    request = f"FETCH {file_name}"
+def download_from_peers(file_name):
+    request = f"DOWNLOAD {file_name}"
     return send_request(request)
 
 
-def inform_fetched_file(file_name):
-    request = f"INFORM {file_name}"
+def inform_downloaded_file(file_name, file_size_str):
+    request = f"INFORM {file_name} {file_size_str}"
     client_socket.send(request.encode())
 
 # LEGACY CODE
